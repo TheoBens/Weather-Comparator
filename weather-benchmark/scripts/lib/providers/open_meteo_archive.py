@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from lib.http_util import httpx_get
+from lib.http_util import http_get_json_with_curl_fallback
 
 ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
 
@@ -38,8 +38,7 @@ def fetch_daily_observations(
         "timezone": "Europe/Paris",
         "windspeed_unit": "ms",
     }
-    r = httpx_get(ARCHIVE, params=params, client=http_client)
-    return r.json()
+    return http_get_json_with_curl_fallback(ARCHIVE, params, client=http_client)
 
 
 def observation_rows(
