@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from psycopg.types.json import Json
 
 from lib.db import connection, query_all
+from lib.http_util import archive_client
 from lib.providers.open_meteo_archive import observation_rows
 
 
@@ -47,29 +48,37 @@ def main() -> None:
           raw = EXCLUDED.raw
         """
         total = 0
-        for i, c in enumerate(cities):
-            if i:
-                time.sleep(0.8)
-            rows = observation_rows(c["id"], c["latitude"], c["longitude"], start, end)
-            for r in rows:
-                cur.execute(
-                    sql,
-                    (
-                        r["city_id"],
-                        r["obs_date"],
-                        r["temp_max_c"],
-                        r["temp_min_c"],
-                        r["temp_mean_c"],
-                        r["wind_speed_max_ms"],
-                        r["wind_dir_deg"],
-                        r["precip_sum_mm"],
-                        r["sunshine_hours"],
-                        r["source"],
-                        Json(r["raw"]),
-                    ),
+        with archive_client() as http_client:
+            for i, c in enumerate(cities):
+                if i:
+                    time.sleep(1.5)
+                rows = observation_rows(
+                    c["id"],
+                    c["latitude"],
+                    c["longitude"],
+                    start,
+                    end,
+                    http_client=http_client,
                 )
-                total += 1
-            print(f"  {c['slug']}: {len(rows)} jours")
+                for r in rows:
+                    cur.execute(
+                        sql,
+                        (
+                            r["city_id"],
+                            r["obs_date"],
+                            r["temp_max_c"],
+                            r["temp_min_c"],
+                            r["temp_mean_c"],
+                            r["wind_speed_max_ms"],
+                            r["wind_dir_deg"],
+                            r["precip_sum_mm"],
+                            r["sunshine_hours"],
+                            r["source"],
+                            Json(r["raw"]),
+                        ),
+                    )
+                    total += 1
+                print(f"  {c['slug']}: {len(rows)} jours")
         print(f"Observations écrites (lignes traitées): {total}")
 
 

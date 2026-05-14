@@ -40,7 +40,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Observations passées
-        run: python collect_observations.py --days 21
+        run: python collect_observations.py --days 14
 
       - name: Prévisions du jour
         run: python collect_forecasts.py --providers open_meteo

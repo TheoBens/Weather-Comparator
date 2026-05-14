@@ -2,5 +2,8 @@
 scripts/.env
 .env
 .env.local
+# Python
+__pycache__/
+*.py[cod]
 # Si le depot git est parent : decommenter la ligne suivante
 # weather-benchmark/scripts/.env
