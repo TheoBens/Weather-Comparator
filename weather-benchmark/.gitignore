@@ -1,0 +1,6 @@
+# Secrets locaux
+scripts/.env
+.env
+.env.local
+# Si le depot git est parent : decommenter la ligne suivante
+# weather-benchmark/scripts/.env

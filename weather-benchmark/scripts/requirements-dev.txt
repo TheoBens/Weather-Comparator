@@ -1,0 +1,3 @@
+# Dépendances optionnelles pour test_api_connectivity.py
+meteofrance-api>=1.3.0
+meteostat>=2.1.0
