@@ -6,6 +6,7 @@ Pour l’instant : connecteur Open-Meteo (sans clé). Ajouter les autres fournis
 from __future__ import annotations
 
 import argparse
+import time
 from datetime import datetime, timezone
 
 from psycopg.types.json import Json
@@ -48,7 +49,6 @@ def main() -> None:
             provider_id = row["id"]
 
             cities = query_all(conn, "SELECT id, latitude, longitude, slug FROM cities ORDER BY id")
-            n = 0
             insert_sql = """
             INSERT INTO forecasts (
               ingest_run_id, provider_id, city_id, issued_at, valid_time, lead_days,
@@ -59,7 +59,9 @@ def main() -> None:
             )
             """
             n = 0
-            for c in cities:
+            for i, c in enumerate(cities):
+                if i:
+                    time.sleep(0.5)
                 rows = daily_rows_for_city(issued_at, c["id"], c["latitude"], c["longitude"])
                 for r in rows:
                     cur.execute(

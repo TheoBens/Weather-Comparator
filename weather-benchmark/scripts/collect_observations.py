@@ -6,6 +6,7 @@ Source par défaut : Open-Meteo Archive (sans clé).
 from __future__ import annotations
 
 import argparse
+import time
 from datetime import date, timedelta
 
 from psycopg.types.json import Json
@@ -46,7 +47,9 @@ def main() -> None:
           raw = EXCLUDED.raw
         """
         total = 0
-        for c in cities:
+        for i, c in enumerate(cities):
+            if i:
+                time.sleep(0.8)
             rows = observation_rows(c["id"], c["latitude"], c["longitude"], start, end)
             for r in rows:
                 cur.execute(

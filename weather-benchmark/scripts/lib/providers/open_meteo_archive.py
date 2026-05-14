@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-import httpx
+from lib.http_util import httpx_get
 
 ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
 
@@ -34,8 +34,7 @@ def fetch_daily_observations(
         "timezone": "Europe/Paris",
         "windspeed_unit": "ms",
     }
-    r = httpx.get(ARCHIVE, params=params, timeout=120.0)
-    r.raise_for_status()
+    r = httpx_get(ARCHIVE, params=params)
     return r.json()
 
 

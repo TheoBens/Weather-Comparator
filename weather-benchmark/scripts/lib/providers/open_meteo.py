@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from lib.http_util import httpx_get
+
 PARIS = ZoneInfo("Europe/Paris")
 
 OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast"
@@ -38,8 +40,7 @@ def fetch_daily_forecast(
         "timezone": "Europe/Paris",
         "windspeed_unit": "ms",
     }
-    r = httpx.get(OPEN_METEO_FORECAST, params=params, timeout=60.0)
-    r.raise_for_status()
+    r = httpx_get(OPEN_METEO_FORECAST, params=params, timeout=httpx.Timeout(90.0, connect=45.0))
     return r.json()
 
 
