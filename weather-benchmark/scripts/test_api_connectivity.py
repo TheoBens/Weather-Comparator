@@ -163,27 +163,6 @@ def test_visual_crossing() -> dict[str, Any]:
     }
 
 
-def test_foreca() -> dict[str, Any]:
-    token = os.getenv("FORECA_API_KEY")
-    if not token:
-        return {"name": "foreca", "ok": False, "detail": "FORECA_API_KEY manquant"}
-    url = f"https://pfa.foreca.com/api/v1/forecast/daily/{LAT},{LON}"
-    for label, headers, params in (
-        ("Bearer", {"Authorization": f"Bearer {token}"}, {}),
-        ("query_token", {}, {"token": token}),
-    ):
-        r = httpx.get(url, headers=headers, params=params, timeout=45.0)
-        if r.status_code == 200:
-            data = r.json()
-            return {
-                "name": "foreca",
-                "ok": True,
-                "http": r.status_code,
-                "detail": f"auth={label} {_summarize_json(data, 120)}",
-            }
-    return {"name": "foreca", "ok": False, "http": r.status_code, "detail": r.text[:250]}
-
-
 def test_meteostat() -> dict[str, Any]:
     """Meteostat 2.x : `daily(Point, start, end)` + `fetch()` — pas d’ancienne classe `Daily`."""
     try:
@@ -268,7 +247,6 @@ TESTS: list[Callable[[], dict[str, Any]]] = [
     test_weatherapi,
     test_tomorrow_io,
     test_visual_crossing,
-    test_foreca,
     test_meteostat,
     test_meteofrance_grand_public,
     test_meteofrance_open_data_portail,

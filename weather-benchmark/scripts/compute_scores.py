@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import math
+from collections import Counter, defaultdict
 from datetime import date, timedelta
 
 import numpy as np
@@ -95,9 +96,17 @@ def main() -> None:
         _explain_no_pairs(start, end)
         return
 
-    # Regroupement par (provider_id, city_id, lead_days)
-    from collections import defaultdict
+    pair_counts = Counter(r["provider_code"] for r in rows)
+    print("Paires prevision/observation (lignes jointes) par fournisseur :")
+    for code, n in sorted(pair_counts.items()):
+        print(f"  {code}: {n}")
+    print(
+        "(Si un fournisseur vient seulement de collect_forecasts 'live', ses dates cibles sont "
+        "souvent encore dans le futur : 0 paire tant qu'il n'y a pas d'historique de runs "
+        "ou de backfill passe - seul open_meteo a un backfill historique pour l'instant.)"
+    )
 
+    # Regroupement par (provider_id, city_id, lead_days)
     groups: dict[tuple[int, int, int], list[dict]] = defaultdict(list)
     for r in rows:
         key = (r["provider_id"], r["city_id"], r["lead_days"])
@@ -180,7 +189,10 @@ def main() -> None:
                 ),
             )
 
-        print(f"Scores insérés pour {len(groups)} groupes (ville × horizon × fournisseur). Fenêtre {start} → {end}.")
+        print(
+            f"Scores inseres pour {len(groups)} groupes "
+            f"(ville x horizon x fournisseur). Fenetre {start} -> {end}."
+        )
 
 
 if __name__ == "__main__":

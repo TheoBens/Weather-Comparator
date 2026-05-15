@@ -24,6 +24,11 @@ jobs:
       POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
       POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
       POSTGRES_SSLMODE: ${{ secrets.POSTGRES_SSLMODE }}
+      # Cles optionnelles : fournisseur saute silencieusement si secret absent
+      WEATHERAPI_KEY: ${{ secrets.WEATHERAPI_KEY }}
+      OPENWEATHERMAP_API_KEY: ${{ secrets.OPENWEATHERMAP_API_KEY }}
+      TOMORROW_IO_API_KEY: ${{ secrets.TOMORROW_IO_API_KEY }}
+      VISUAL_CROSSING_API_KEY: ${{ secrets.VISUAL_CROSSING_API_KEY }}
 
     steps:
       - name: Checkout
@@ -43,7 +48,11 @@ jobs:
         run: python collect_observations.py --days 14
 
       - name: Prévisions du jour
-        run: python collect_forecasts.py --providers open_meteo
+        run: >
+          python collect_forecasts.py --providers
+          open_meteo meteo_france
+          weatherapi openweathermap
+          tomorrow_io visual_crossing
 
       - name: Calcul des scores
         run: python compute_scores.py --days 60
