@@ -34,6 +34,9 @@ COLLECTORS: dict[str, ForecastCollector] = {
     "visual_crossing": visual_crossing_daily_rows,
 }
 
+# Défaut = tout le monde (sans clé = saute silencieusement, comme dans le workflow GitHub)
+DEFAULT_PROVIDER_CODES: tuple[str, ...] = tuple(COLLECTORS.keys())
+
 PROVIDER_REQUIRES_ENV: dict[str, tuple[str, ...]] = {
     "weatherapi": ("WEATHERAPI_KEY", "WEATHERAPI_API_KEY"),
     "openweathermap": ("OPENWEATHERMAP_API_KEY",),
@@ -54,10 +57,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--providers",
         nargs="+",
-        default=["open_meteo"],
+        default=list(DEFAULT_PROVIDER_CODES),
         help=(
-            "Codes : open_meteo, meteo_france, weatherapi, openweathermap, "
-            "tomorrow_io, visual_crossing (cles manquantes = saut)"
+            "Codes (défaut : tous). Sans clé pour un API payant/free tier, ce fournisseur est ignoré."
+            "Liste : "
+            + ", ".join(DEFAULT_PROVIDER_CODES)
         ),
     )
     return p.parse_args()
