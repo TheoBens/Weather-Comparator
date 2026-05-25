@@ -42,8 +42,11 @@ def build_url(url: str, params: Mapping[str, Any] | None) -> str:
     return url + "?" + urlencode(_flatten_query(params))
 
 
-def curl_get_body(url_with_query: str) -> str:
-    """Fallback TLS : curl utilise une pile différente de Python/httpx (souvent plus fiable sur les runners GH)."""
+def curl_get_body(url_with_query: str, *, connect_timeout_s: int = 120, max_time_s: int = 300) -> str:
+    """Fallback TLS : curl utilise une pile différente de Python/httpx (souvent plus fiable sur les runners GH).
+
+    ``-4`` force IPv4 : sur ubuntu-latest ça évite souvent ``ConnectError`` / unreachable en IPv6.
+    """
     curl_exe = shutil.which("curl")
     if not curl_exe:
         raise RuntimeError("curl introuvable dans le PATH")
@@ -52,18 +55,19 @@ def curl_get_body(url_with_query: str) -> str:
             curl_exe,
             "-sS",
             "-L",
+            "-4",
             "--compressed",
             "--connect-timeout",
-            "90",
+            str(connect_timeout_s),
             "--max-time",
-            "240",
+            str(max_time_s),
             "-H",
             "User-Agent: weather-benchmark/1.1 (+open-meteo)",
             url_with_query,
         ],
         capture_output=True,
         text=True,
-        timeout=260,
+        timeout=max_time_s + 30,
         check=False,
     )
     if proc.returncode != 0:
@@ -77,21 +81,49 @@ def http_get_json_with_curl_fallback(
     params: Mapping[str, Any] | None = None,
     *,
     client: httpx.Client | None = None,
+    full_retries: int = 5,
+    full_backoff_s: float = 15.0,
 ) -> dict[str, Any]:
     """
     GET JSON ; en cas d'échec TLS/connexion avec httpx, retente via curl (présent sur ubuntu-latest).
+
+    Boucle externe : si httpx puis curl échouent tous les deux (souvent sur Open-Meteo depuis CI),
+    on attend et on recommence — les pannes sont souvent transitoires.
     """
-    try:
-        r = httpx_get(url, params=params, client=client)
-        return r.json()
-    except (
-        httpx.ConnectTimeout,
-        httpx.ReadTimeout,
-        httpx.ConnectError,
-        httpx.RemoteProtocolError,
-    ):
-        full = build_url(url, params or {})
-        return json.loads(curl_get_body(full))
+    full = build_url(url, params or {})
+    last: BaseException | None = None
+    for attempt in range(full_retries):
+        try:
+            try:
+                r = httpx_get(url, params=params, client=client)
+                return r.json()
+            except (
+                httpx.ConnectTimeout,
+                httpx.ReadTimeout,
+                httpx.ConnectError,
+                httpx.RemoteProtocolError,
+                httpx.WriteError,
+            ) as e:
+                last = e
+                return json.loads(curl_get_body(full))
+        except (
+            RuntimeError,
+            json.JSONDecodeError,
+            subprocess.TimeoutExpired,
+            httpx.TimeoutException,
+            httpx.ConnectTimeout,
+            httpx.ReadTimeout,
+            httpx.ConnectError,
+            httpx.RemoteProtocolError,
+            httpx.WriteError,
+        ) as e:
+            last = e
+            if attempt >= full_retries - 1:
+                break
+            time.sleep(full_backoff_s * (attempt + 1))
+
+    assert last is not None
+    raise RuntimeError(f"Échec après {full_retries} tentatives (httpx puis curl)") from last
 
 
 def httpx_get(

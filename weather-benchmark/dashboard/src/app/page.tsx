@@ -1,6 +1,8 @@
 import { getDb } from "@/lib/db";
+import type { ProviderGlobalRow } from "@/lib/scores";
 import {
   fetchCityBestProvider,
+  fetchCityBestProviderByRain,
   fetchGlobalLeaderboard,
   fetchHorizonMatrix,
   fetchLatestScoreWindow,
@@ -22,6 +24,19 @@ function fmtPct(n: number | null | undefined): string {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   }) + " %";
+}
+
+/** Pour le classement « pluie » : meilleure précision d’abord ; sans donnée en dernier. */
+function sortGlobalByRainAccDesc(rows: ProviderGlobalRow[]): ProviderGlobalRow[] {
+  return [...rows].sort((a, b) => {
+    const av = a.avgRainAcc;
+    const bv = b.avgRainAcc;
+    if (av == null && bv == null) return a.code.localeCompare(b.code);
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const d = bv - av;
+    return d !== 0 ? d : a.code.localeCompare(b.code);
+  });
 }
 
 export default async function Home() {
@@ -93,15 +108,17 @@ export default async function Home() {
   let globalRows: Awaited<ReturnType<typeof fetchGlobalLeaderboard>> = [];
   let horizonRows: Awaited<ReturnType<typeof fetchHorizonMatrix>> = [];
   let cityRows: Awaited<ReturnType<typeof fetchCityBestProvider>> = [];
+  let cityRainRows: Awaited<ReturnType<typeof fetchCityBestProviderByRain>> = [];
 
   try {
     windowBounds = await fetchLatestScoreWindow(sql);
     if (windowBounds) {
-      const { end } = windowBounds;
-      [globalRows, horizonRows, cityRows] = await Promise.all([
-        fetchGlobalLeaderboard(sql, end),
-        fetchHorizonMatrix(sql, end),
-        fetchCityBestProvider(sql, end),
+      const { start: wStart, end: wEnd } = windowBounds;
+      [globalRows, horizonRows, cityRows, cityRainRows] = await Promise.all([
+        fetchGlobalLeaderboard(sql, wStart, wEnd),
+        fetchHorizonMatrix(sql, wStart, wEnd),
+        fetchCityBestProvider(sql, wStart, wEnd),
+        fetchCityBestProviderByRain(sql, wStart, wEnd),
       ]);
     }
   } catch (e) {
@@ -304,6 +321,71 @@ export default async function Home() {
             </section>
 
             <section className="space-y-4">
+              <h2 className="text-xl font-semibold text-white">
+                Classement global (précision prédiction pluie sec / mouillé)
+              </h2>
+              <p className="text-sm text-slate-400">
+                Part des jours où la prévision a le bon régime (&gt; seuil ou sec) pour
+                l&apos;ensemble des villes et horizons — plus le pourcentage est élevé, mieux
+                c&apos;est.
+              </p>
+              <div className="overflow-x-auto rounded-2xl border border-white/10 bg-slate-900/50 shadow-xl shadow-sky-950/50">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-slate-400">
+                      <th className="px-4 py-3 font-medium">Rang</th>
+                      <th className="px-4 py-3 font-medium">Fournisseur</th>
+                      <th className="px-4 py-3 font-medium">Préc. pluie</th>
+                      <th className="px-4 py-3 font-medium">MAE T (°C)</th>
+                      <th className="px-4 py-3 font-medium">RMSE T (°C)</th>
+                      <th className="px-4 py-3 font-medium">MAE vent (m/s)</th>
+                      <th className="px-4 py-3 font-medium">MAE pluie (mm)</th>
+                      <th className="px-4 py-3 font-medium">Brier prob.</th>
+                      <th className="px-4 py-3 font-medium">Échantillons</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortGlobalByRainAccDesc(globalRows).map((r, i) => (
+                      <tr
+                        key={`rain-${r.code}`}
+                        className="border-b border-white/5 hover:bg-white/[0.04]"
+                      >
+                        <td className="px-4 py-3 font-mono text-sky-300">{i + 1}</td>
+                        <td className="px-4 py-3">
+                          <span className="font-medium text-white">{r.name}</span>
+                          <span className="ml-2 font-mono text-xs text-slate-500">
+                            {r.code}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-medium text-emerald-200/95">
+                          {fmtPct(r.avgRainAcc)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-300">
+                          {fmt(r.avgMaeTemp)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-300">
+                          {fmt(r.avgRmseTemp)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-300">
+                          {fmt(r.avgMaeWind)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-300">
+                          {fmt(r.avgRainMae)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-300">
+                          {fmt(r.avgBrier, 3)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-500">
+                          {r.totalSamples}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="space-y-4">
               <h2 className="text-xl font-semibold text-white">MAE température par horizon</h2>
               <div className="overflow-x-auto rounded-2xl border border-white/10 bg-slate-900/50">
                 <table className="w-full min-w-[880px] text-left text-sm">
@@ -364,6 +446,38 @@ export default async function Home() {
                     <p className="mt-2 text-sm text-slate-400">
                       MAE T moy.{" "}
                       <span className="font-mono text-sky-200">{fmt(c.avgMaeTemp)} °C</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="text-xl font-semibold text-white">
+                Meilleur fournisseur par ville (précision pluie sec / mouillé)
+              </h2>
+              <p className="text-sm text-slate-400">
+                Pour chaque ville : fournisseur avec la meilleure moyenne de précision binaire sur
+                les horizons J+1…J+7 (même métrique que la colonne précision du tableau global).
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {cityRainRows.map((c) => (
+                  <div
+                    key={`rain-${c.citySlug}`}
+                    className="rounded-xl border border-white/10 bg-slate-900/40 p-4"
+                  >
+                    <p className="text-xs uppercase tracking-wide text-sky-400/90">
+                      {c.cityName}
+                    </p>
+                    <p className="mt-1 text-lg font-medium text-white">
+                      {c.bestProviderName}
+                    </p>
+                    <p className="font-mono text-xs text-slate-500">{c.bestProviderCode}</p>
+                    <p className="mt-2 text-sm text-slate-400">
+                      Précision pluie{" "}
+                      <span className="font-mono text-emerald-200/95">
+                        {fmtPct(c.avgRainAcc)}
+                      </span>
                     </p>
                   </div>
                 ))}

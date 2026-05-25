@@ -31,6 +31,15 @@ export type CityBestRow = {
   avgMaeTemp: number | null;
 };
 
+/** Meilleur fournisseur par ville selon précision sec/pluie (moyenne sur horizons). */
+export type CityBestByRainRow = {
+  citySlug: string;
+  cityName: string;
+  bestProviderCode: string;
+  bestProviderName: string;
+  avgRainAcc: number | null;
+};
+
 function toDateString(v: unknown): string | null {
   if (v == null) return null;
   if (typeof v === "string") return v.slice(0, 10);
@@ -41,21 +50,27 @@ function toDateString(v: unknown): string | null {
 export async function fetchLatestScoreWindow(
   sql: postgres.Sql,
 ): Promise<ScoreWindow | null> {
-  const [row] = await sql<{ mx: Date | string | null }[]>`
-    SELECT MAX(score_window_end) AS mx FROM forecast_scores
+  const rows = await sql<{ wstart: Date | string; wend: Date | string }[]>`
+    SELECT DISTINCT score_window_start AS wstart, score_window_end AS wend FROM forecast_scores
   `;
-  const end = toDateString(row?.mx ?? null);
-  if (!end) return null;
-  const [bounds] = await sql<{ mn: Date | string | null }[]>`
-    SELECT MIN(score_window_start) AS mn FROM forecast_scores
-    WHERE score_window_end = ${end}::date
-  `;
-  const start = toDateString(bounds?.mn ?? null) ?? end;
-  return { start, end };
+  if (!rows.length) return null;
+  const sorted = rows
+    .map((r) => ({
+      start: toDateString(r.wstart)!,
+      end: toDateString(r.wend)!,
+    }))
+    .sort((a, b) => {
+      const endCmp =
+        Number(b.end.replaceAll("-", "")) - Number(a.end.replaceAll("-", ""));
+      if (endCmp !== 0) return endCmp;
+      return Number(b.start.replaceAll("-", "")) - Number(a.start.replaceAll("-", ""));
+    });
+  return sorted[0]!;
 }
 
 export async function fetchGlobalLeaderboard(
   sql: postgres.Sql,
+  windowStart: string,
   windowEnd: string,
 ): Promise<ProviderGlobalRow[]> {
   const rows = await sql<
@@ -83,7 +98,8 @@ export async function fetchGlobalLeaderboard(
       SUM(fs.n_samples)::bigint AS total_samples
     FROM forecast_scores fs
     JOIN providers p ON p.id = fs.provider_id
-    WHERE fs.score_window_end = ${windowEnd}::date
+    WHERE fs.score_window_start = ${windowStart}::date
+      AND fs.score_window_end = ${windowEnd}::date
     GROUP BY p.id, p.code, p.name
     ORDER BY avg_mae_temp ASC NULLS LAST
   `;
@@ -102,6 +118,7 @@ export async function fetchGlobalLeaderboard(
 
 export async function fetchHorizonMatrix(
   sql: postgres.Sql,
+  windowStart: string,
   windowEnd: string,
 ): Promise<HorizonCell[]> {
   const rows = await sql<
@@ -119,7 +136,8 @@ export async function fetchHorizonMatrix(
       AVG(fs.mae_temp_c)::float8 AS mae
     FROM forecast_scores fs
     JOIN providers p ON p.id = fs.provider_id
-    WHERE fs.score_window_end = ${windowEnd}::date
+    WHERE fs.score_window_start = ${windowStart}::date
+      AND fs.score_window_end = ${windowEnd}::date
     GROUP BY p.id, p.code, p.name, fs.horizon_days
     ORDER BY p.code, fs.horizon_days
   `;
@@ -137,6 +155,7 @@ export async function fetchHorizonMatrix(
 
 export async function fetchCityBestProvider(
   sql: postgres.Sql,
+  windowStart: string,
   windowEnd: string,
 ): Promise<CityBestRow[]> {
   const rows = await sql`
@@ -154,7 +173,8 @@ export async function fetchCityBestProvider(
       FROM forecast_scores fs
       JOIN cities c ON c.id = fs.city_id
       JOIN providers p ON p.id = fs.provider_id
-      WHERE fs.score_window_end = ${windowEnd}::date
+      WHERE fs.score_window_start = ${windowStart}::date
+        AND fs.score_window_end = ${windowEnd}::date
       GROUP BY c.id, c.slug, c.name, p.id, p.code, p.name
     )
     SELECT slug, city_name, code, provider_name, avg_mae
@@ -168,5 +188,43 @@ export async function fetchCityBestProvider(
     bestProviderCode: r.code as string,
     bestProviderName: r.provider_name as string,
     avgMaeTemp: r.avg_mae != null ? Number(r.avg_mae) : null,
+  }));
+}
+
+export async function fetchCityBestProviderByRain(
+  sql: postgres.Sql,
+  windowStart: string,
+  windowEnd: string,
+): Promise<CityBestByRainRow[]> {
+  const rows = await sql`
+    WITH ranked AS (
+      SELECT
+        c.slug,
+        c.name AS city_name,
+        p.code,
+        p.name AS provider_name,
+        AVG(fs.rain_binary_accuracy)::float8 AS avg_rain,
+        ROW_NUMBER() OVER (
+          PARTITION BY c.id
+          ORDER BY AVG(fs.rain_binary_accuracy) DESC NULLS LAST
+        ) AS rn
+      FROM forecast_scores fs
+      JOIN cities c ON c.id = fs.city_id
+      JOIN providers p ON p.id = fs.provider_id
+      WHERE fs.score_window_start = ${windowStart}::date
+        AND fs.score_window_end = ${windowEnd}::date
+      GROUP BY c.id, c.slug, c.name, p.id, p.code, p.name
+    )
+    SELECT slug, city_name, code, provider_name, avg_rain
+    FROM ranked
+    WHERE rn = 1
+    ORDER BY city_name
+  `;
+  return rows.map((r) => ({
+    citySlug: r.slug as string,
+    cityName: r.city_name as string,
+    bestProviderCode: r.code as string,
+    bestProviderName: r.provider_name as string,
+    avgRainAcc: r.avg_rain != null ? Number(r.avg_rain) : null,
   }));
 }
