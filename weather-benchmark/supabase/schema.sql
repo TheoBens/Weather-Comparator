@@ -113,23 +113,24 @@ CREATE INDEX IF NOT EXISTS idx_scores_leaderboard
   ON forecast_scores (horizon_days, score_window_start, provider_id);
 
 -- ---------------------------------------------------------------------------
--- Données initiales : villes FR (coordonnées approximatives centre-ville)
+-- Données initiales : villes suivies (coordonnées approximatives centre-ville)
 -- ---------------------------------------------------------------------------
 
-INSERT INTO cities (slug, name, latitude, longitude) VALUES
-  ('paris', 'Paris', 48.8566, 2.3522),
-  ('bordeaux', 'Bordeaux', 44.8378, -0.5792),
-  ('toulouse', 'Toulouse', 43.6047, 1.4442),
-  ('lyon', 'Lyon', 45.7640, 4.8357),
-  ('marseille', 'Marseille', 43.2965, 5.3698),
-  ('nantes', 'Nantes', 47.2184, -1.5536),
-  ('lille', 'Lille', 50.6292, 3.0573),
-  ('limoges', 'Limoges', 45.8336, 1.2611),
-  ('besancon', 'Besançon', 47.2380, 6.0243),
-  ('brest', 'Brest', 48.3905, -4.4861),
-  ('nice', 'Nice', 43.7102, 7.2620),
-  ('strasbourg', 'Strasbourg', 48.5734, 7.7521),
-  ('clermont-ferrand', 'Clermont-Ferrand', 45.7772, 3.0870)
+INSERT INTO cities (slug, name, country, latitude, longitude) VALUES
+  ('paris', 'Paris', 'FR', 48.8566, 2.3522),
+  ('bordeaux', 'Bordeaux', 'FR', 44.8378, -0.5792),
+  ('toulouse', 'Toulouse', 'FR', 43.6047, 1.4442),
+  ('lyon', 'Lyon', 'FR', 45.7640, 4.8357),
+  ('marseille', 'Marseille', 'FR', 43.2965, 5.3698),
+  ('nantes', 'Nantes', 'FR', 47.2184, -1.5536),
+  ('lille', 'Lille', 'FR', 50.6292, 3.0573),
+  ('limoges', 'Limoges', 'FR', 45.8336, 1.2611),
+  ('besancon', 'Besançon', 'FR', 47.2380, 6.0243),
+  ('brest', 'Brest', 'FR', 48.3905, -4.4861),
+  ('nice', 'Nice', 'FR', 43.7102, 7.2620),
+  ('strasbourg', 'Strasbourg', 'FR', 48.5734, 7.7521),
+  ('clermont-ferrand', 'Clermont-Ferrand', 'FR', 45.7772, 3.0870),
+  ('saint-sebastien', 'Saint-Sébastien (Donostia)', 'ES', 43.3183, -1.9812)
 ON CONFLICT (slug) DO NOTHING;
 
 INSERT INTO providers (code, name) VALUES

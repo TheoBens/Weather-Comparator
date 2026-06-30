@@ -2,7 +2,7 @@
 
 [Link to the website](https://weather-comparator-lime.vercel.app/)
 
-Bench qui compare plusieurs APIs météo (précision température, vent, pluie) sur des villes françaises.
+Bench qui compare plusieurs APIs météo (précision température, vent, pluie) sur un panel de villes (France, Saint-Sébastien / Donostia…).
 
 ## Stack
 
