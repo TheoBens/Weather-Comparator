@@ -2,15 +2,14 @@
 
 import { useMemo, useState } from "react";
 
+import { CityRankMatrix } from "@/components/CityRankMatrix";
 import { CriterionSelect } from "@/components/CriterionSelect";
 import { HorizonMatrix } from "@/components/HorizonMatrix";
 import {
   BRIER_COLUMN_TITLE,
   DEFAULT_RANK_CRITERION,
   TABLE_METRIC_COLUMNS,
-  bestProviderPerCity,
   formatGlobalCell,
-  formatMetricValue,
   getCriterion,
   sortProvidersByCriterion,
   type RankCriterionId,
@@ -27,19 +26,10 @@ type Props = {
 export function DashboardRankings({ globalRows, cityMetricRows, horizonRows }: Props) {
   const [globalCriterionId, setGlobalCriterionId] =
     useState<RankCriterionId>(DEFAULT_RANK_CRITERION);
-  const [cityCriterionId, setCityCriterionId] =
-    useState<RankCriterionId>(DEFAULT_RANK_CRITERION);
-
-  const cityCriterion = getCriterion(cityCriterionId);
 
   const sortedGlobal = useMemo(
     () => sortProvidersByCriterion(globalRows, globalCriterionId),
     [globalRows, globalCriterionId],
-  );
-
-  const cityBest = useMemo(
-    () => bestProviderPerCity(cityMetricRows, cityCriterionId),
-    [cityMetricRows, cityCriterionId],
   );
 
   return (
@@ -119,40 +109,7 @@ export function DashboardRankings({ globalRows, cityMetricRows, horizonRows }: P
 
       <HorizonMatrix rows={horizonRows} />
 
-      <section className="space-y-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-white">Meilleur fournisseur par ville</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Horizons J+1 à J+{FAIR_LEADERBOARD_MAX_HORIZON}
-            </p>
-          </div>
-          <CriterionSelect
-            id="city-criterion"
-            value={cityCriterionId}
-            onChange={setCityCriterionId}
-          />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {cityBest.map((c) => (
-            <div
-              key={c.citySlug}
-              className="rounded-xl border border-white/10 bg-slate-900/40 p-4"
-            >
-              <p className="text-xs uppercase tracking-wide text-sky-400/90">{c.cityName}</p>
-              <p className="mt-1 text-lg font-medium text-white">{c.bestProviderName}</p>
-              <p className="font-mono text-xs text-slate-500">{c.bestProviderCode}</p>
-              <p className="mt-2 text-sm text-slate-400">
-                {cityCriterion.columnLabel}{" "}
-                <span className="font-mono text-emerald-200/95">
-                  {formatMetricValue(c.metricValue, cityCriterion.format)}
-                  {cityCriterion.unit ?? ""}
-                </span>
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
+      <CityRankMatrix rows={cityMetricRows} />
     </>
   );
 }

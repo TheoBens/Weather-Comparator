@@ -163,6 +163,84 @@ export function sortProvidersByCriterion(
   });
 }
 
+export type CityRankCell = {
+  rank: number | null;
+  value: number | null;
+};
+
+export type CityProviderRankMatrix = {
+  cities: { slug: string; name: string }[];
+  providers: { code: string; name: string }[];
+  /** citySlug → providerCode */
+  cells: Map<string, Map<string, CityRankCell>>;
+  /** Moyenne de la métrique sur les fournisseurs ayant une valeur, par ville. */
+  cityAverages: Map<string, number | null>;
+};
+
+export function buildCityProviderRankMatrix(
+  rows: CityProviderMetricRow[],
+  criterionId: RankCriterionId,
+): CityProviderRankMatrix {
+  const { higherIsBetter } = getCriterion(criterionId);
+  const byCity = new Map<string, CityProviderMetricRow[]>();
+  const providerMap = new Map<string, string>();
+
+  for (const r of rows) {
+    providerMap.set(r.providerCode, r.providerName);
+    const list = byCity.get(r.citySlug) ?? [];
+    list.push(r);
+    byCity.set(r.citySlug, list);
+  }
+
+  const cities = [...byCity.values()]
+    .map((group) => ({ slug: group[0]!.citySlug, name: group[0]!.cityName }))
+    .sort((a, b) => a.name.localeCompare(b.name, "fr"));
+
+  const providers = [...providerMap.entries()]
+    .map(([code, name]) => ({ code, name }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+
+  const cells = new Map<string, Map<string, CityRankCell>>();
+  const cityAverages = new Map<string, number | null>();
+
+  for (const { slug } of cities) {
+    const group = byCity.get(slug) ?? [];
+    const sorted = [...group].sort((a, b) => {
+      const av = metricFromCity(a, criterionId);
+      const bv = metricFromCity(b, criterionId);
+      if (av == null && bv == null) return a.providerCode.localeCompare(b.providerCode);
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const d = higherIsBetter ? bv - av : av - bv;
+      return d !== 0 ? d : a.providerCode.localeCompare(b.providerCode);
+    });
+
+    const cityCells = new Map<string, CityRankCell>();
+    let rank = 0;
+    for (const row of sorted) {
+      const value = metricFromCity(row, criterionId);
+      if (value != null) rank += 1;
+      cityCells.set(row.providerCode, {
+        rank: value != null ? rank : null,
+        value,
+      });
+    }
+    cells.set(slug, cityCells);
+
+    const metricValues = group
+      .map((row) => metricFromCity(row, criterionId))
+      .filter((v): v is number => v != null && !Number.isNaN(v));
+    cityAverages.set(
+      slug,
+      metricValues.length > 0
+        ? metricValues.reduce((sum, v) => sum + v, 0) / metricValues.length
+        : null,
+    );
+  }
+
+  return { cities, providers, cells, cityAverages };
+}
+
 export type CityBestDisplay = {
   citySlug: string;
   cityName: string;
