@@ -33,7 +33,25 @@ function assertPoolerUrlIfApplicable(connectionUrl: string): void {
     throw new Error(
       "DATABASE_URL : sur *.pooler.supabase.com, le user dans l'URI doit être postgres.<référence>, " +
         "pas « postgres » seul. Recopie l'URI « Session pooler » depuis Supabase, " +
-        "ou utilise POSTGRES_HOST + POSTGRES_USER + POSTGRES_PASSWORD (et supprime / comment la ligne DATABASE_URL).",
+        "ou utilise POSTGRES_HOST + POSTGRES_USER + POSTGRES_PASSWORD (et supprime DATABASE_URL sur Vercel).",
+    );
+  }
+}
+
+/** Dans une URI, `#` coupe le mot de passe (fragment) → auth « postgres » + mauvais mdp. */
+function assertDatabaseUrlNoRawHash(connectionUrl: string): void {
+  const raw = connectionUrl.trim();
+  const schemeEnd = raw.indexOf("://");
+  if (schemeEnd < 0) return;
+  const rest = raw.slice(schemeEnd + 3);
+  const at = rest.indexOf("@");
+  if (at < 0) return;
+  const userinfo = rest.slice(0, at);
+  if (userinfo.includes("#") && !userinfo.includes("%23")) {
+    throw new Error(
+      "DATABASE_URL : le mot de passe contient « # » non encodé (l'URI est tronquée). " +
+        "Sur Vercel, supprime DATABASE_URL et utilise POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD à la place, " +
+        "ou encode # en %23 dans l'URI.",
     );
   }
 }
@@ -115,6 +133,7 @@ export function getDb(): postgres.Sql | null {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) return null;
 
+  assertDatabaseUrlNoRawHash(url);
   assertPoolerUrlIfApplicable(url);
 
   singleton = postgres(url, {

@@ -10,6 +10,8 @@ npm run dev
 Ouvre **[http://localhost:3000](http://localhost:3000)** dans le navigateur.  
 Les tableaux lisent la base Postgres (`forecast_scores`, etc.) ; configure `dashboard/.env.local` comme `scripts/.env` (pooler Supabase ou `DATABASE_URL`).
 
+**Mise en ligne gratuite (Vercel)** : guide pas à pas → [`DEPLOY_VERCEL.md`](./DEPLOY_VERCEL.md).
+
 ---
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).

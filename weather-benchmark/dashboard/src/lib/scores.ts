@@ -1,5 +1,8 @@
 import type postgres from "postgres";
 
+/** Classements global et par ville : horizons J+1…J+3 (couverture ~ Météo-France). */
+export const FAIR_LEADERBOARD_MAX_HORIZON = 3;
+
 export type ScoreWindow = {
   start: string;
   end: string;
@@ -17,10 +20,19 @@ export type ProviderGlobalRow = {
   totalSamples: number;
 };
 
-export type HorizonCell = {
+export type HorizonMetricValues = {
+  avgMaeTemp: number | null;
+  avgRmseTemp: number | null;
+  avgMaeWind: number | null;
+  avgRainAcc: number | null;
+  avgRainMae: number | null;
+  avgBrier: number | null;
+};
+
+export type HorizonProviderRow = {
   code: string;
   name: string;
-  byHorizon: Record<number, number | null>;
+  byHorizon: Record<number, HorizonMetricValues>;
 };
 
 export type CityBestRow = {
@@ -29,6 +41,20 @@ export type CityBestRow = {
   bestProviderCode: string;
   bestProviderName: string;
   avgMaeTemp: number | null;
+};
+
+/** Métriques agrégées par ville × fournisseur (pour classement dynamique côté client). */
+export type CityProviderMetricRow = {
+  citySlug: string;
+  cityName: string;
+  providerCode: string;
+  providerName: string;
+  avgMaeTemp: number | null;
+  avgRmseTemp: number | null;
+  avgMaeWind: number | null;
+  avgRainAcc: number | null;
+  avgRainMae: number | null;
+  avgBrier: number | null;
 };
 
 /** Meilleur fournisseur par ville selon précision sec/pluie (moyenne sur horizons). */
@@ -100,6 +126,7 @@ export async function fetchGlobalLeaderboard(
     JOIN providers p ON p.id = fs.provider_id
     WHERE fs.score_window_start = ${windowStart}::date
       AND fs.score_window_end = ${windowEnd}::date
+      AND fs.horizon_days <= ${FAIR_LEADERBOARD_MAX_HORIZON}
     GROUP BY p.id, p.code, p.name
     ORDER BY avg_mae_temp ASC NULLS LAST
   `;
@@ -120,20 +147,30 @@ export async function fetchHorizonMatrix(
   sql: postgres.Sql,
   windowStart: string,
   windowEnd: string,
-): Promise<HorizonCell[]> {
+): Promise<HorizonProviderRow[]> {
   const rows = await sql<
     {
       code: string;
       name: string;
       horizon_days: number;
-      mae: string | null;
+      avg_mae_temp: string | null;
+      avg_rmse_temp: string | null;
+      avg_mae_wind: string | null;
+      avg_rain_acc: string | null;
+      avg_rain_mae: string | null;
+      avg_brier: string | null;
     }[]
   >`
     SELECT
       p.code,
       p.name,
       fs.horizon_days,
-      AVG(fs.mae_temp_c)::float8 AS mae
+      AVG(fs.mae_temp_c)::float8 AS avg_mae_temp,
+      AVG(fs.rmse_temp_c)::float8 AS avg_rmse_temp,
+      AVG(fs.mae_wind_ms)::float8 AS avg_mae_wind,
+      AVG(fs.rain_binary_accuracy)::float8 AS avg_rain_acc,
+      AVG(fs.rain_mae_mm)::float8 AS avg_rain_mae,
+      AVG(fs.precip_prob_brier)::float8 AS avg_brier
     FROM forecast_scores fs
     JOIN providers p ON p.id = fs.provider_id
     WHERE fs.score_window_start = ${windowStart}::date
@@ -141,14 +178,21 @@ export async function fetchHorizonMatrix(
     GROUP BY p.id, p.code, p.name, fs.horizon_days
     ORDER BY p.code, fs.horizon_days
   `;
-  const byCode = new Map<string, HorizonCell>();
+  const byCode = new Map<string, HorizonProviderRow>();
   for (const r of rows) {
     let cell = byCode.get(r.code);
     if (!cell) {
       cell = { code: r.code, name: r.name, byHorizon: {} };
       byCode.set(r.code, cell);
     }
-    cell.byHorizon[r.horizon_days] = r.mae != null ? Number(r.mae) : null;
+    cell.byHorizon[r.horizon_days] = {
+      avgMaeTemp: r.avg_mae_temp != null ? Number(r.avg_mae_temp) : null,
+      avgRmseTemp: r.avg_rmse_temp != null ? Number(r.avg_rmse_temp) : null,
+      avgMaeWind: r.avg_mae_wind != null ? Number(r.avg_mae_wind) : null,
+      avgRainAcc: r.avg_rain_acc != null ? Number(r.avg_rain_acc) : null,
+      avgRainMae: r.avg_rain_mae != null ? Number(r.avg_rain_mae) : null,
+      avgBrier: r.avg_brier != null ? Number(r.avg_brier) : null,
+    };
   }
   return Array.from(byCode.values()).sort((a, b) => a.code.localeCompare(b.code));
 }
@@ -226,5 +270,58 @@ export async function fetchCityBestProviderByRain(
     bestProviderCode: r.code as string,
     bestProviderName: r.provider_name as string,
     avgRainAcc: r.avg_rain != null ? Number(r.avg_rain) : null,
+  }));
+}
+
+export async function fetchCityProviderMetrics(
+  sql: postgres.Sql,
+  windowStart: string,
+  windowEnd: string,
+): Promise<CityProviderMetricRow[]> {
+  const rows = await sql<
+    {
+      slug: string;
+      city_name: string;
+      code: string;
+      provider_name: string;
+      avg_mae_temp: string | null;
+      avg_rmse_temp: string | null;
+      avg_mae_wind: string | null;
+      avg_rain_acc: string | null;
+      avg_rain_mae: string | null;
+      avg_brier: string | null;
+    }[]
+  >`
+    SELECT
+      c.slug,
+      c.name AS city_name,
+      p.code,
+      p.name AS provider_name,
+      AVG(fs.mae_temp_c)::float8 AS avg_mae_temp,
+      AVG(fs.rmse_temp_c)::float8 AS avg_rmse_temp,
+      AVG(fs.mae_wind_ms)::float8 AS avg_mae_wind,
+      AVG(fs.rain_binary_accuracy)::float8 AS avg_rain_acc,
+      AVG(fs.rain_mae_mm)::float8 AS avg_rain_mae,
+      AVG(fs.precip_prob_brier)::float8 AS avg_brier
+    FROM forecast_scores fs
+    JOIN cities c ON c.id = fs.city_id
+    JOIN providers p ON p.id = fs.provider_id
+    WHERE fs.score_window_start = ${windowStart}::date
+      AND fs.score_window_end = ${windowEnd}::date
+      AND fs.horizon_days <= ${FAIR_LEADERBOARD_MAX_HORIZON}
+    GROUP BY c.id, c.slug, c.name, p.id, p.code, p.name
+    ORDER BY c.name, p.code
+  `;
+  return rows.map((r) => ({
+    citySlug: r.slug,
+    cityName: r.city_name,
+    providerCode: r.code,
+    providerName: r.provider_name,
+    avgMaeTemp: r.avg_mae_temp != null ? Number(r.avg_mae_temp) : null,
+    avgRmseTemp: r.avg_rmse_temp != null ? Number(r.avg_rmse_temp) : null,
+    avgMaeWind: r.avg_mae_wind != null ? Number(r.avg_mae_wind) : null,
+    avgRainAcc: r.avg_rain_acc != null ? Number(r.avg_rain_acc) : null,
+    avgRainMae: r.avg_rain_mae != null ? Number(r.avg_rain_mae) : null,
+    avgBrier: r.avg_brier != null ? Number(r.avg_brier) : null,
   }));
 }
