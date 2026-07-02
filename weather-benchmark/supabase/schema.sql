@@ -130,7 +130,8 @@ INSERT INTO cities (slug, name, country, latitude, longitude) VALUES
   ('nice', 'Nice', 'FR', 43.7102, 7.2620),
   ('strasbourg', 'Strasbourg', 'FR', 48.5734, 7.7521),
   ('clermont-ferrand', 'Clermont-Ferrand', 'FR', 45.7772, 3.0870),
-  ('saint-sebastien', 'Saint-Sébastien (Donostia)', 'ES', 43.3183, -1.9812)
+  ('saint-sebastien', 'Saint-Sébastien (Donostia)', 'ES', 43.3183, -1.9812),
+  ('bayonne', 'Bayonne', 'FR', 43.4929, -1.4748)
 ON CONFLICT (slug) DO NOTHING;
 
 INSERT INTO providers (code, name) VALUES
