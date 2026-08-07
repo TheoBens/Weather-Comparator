@@ -2,6 +2,7 @@
 scripts/.env
 .env
 .env.local
+scripts/supabase/
 # Python
 __pycache__/
 *.py[cod]
